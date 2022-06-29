@@ -1,13 +1,7 @@
-# Experience Replay
-
-# Importing the libraries
 import numpy as np
 from collections import namedtuple, deque
 
-# Defining one Step
 Step = namedtuple('Step', ['state', 'action', 'reward', 'done'])
-
-# Making the AI progress on several (n_step) steps
 
 
 class NStepProgress:
@@ -49,8 +43,6 @@ class NStepProgress:
         self.rewards = []
         return rewards_steps
 
-# Implementing Experience Replay
-
 
 class ReplayMemory:
 
@@ -60,7 +52,7 @@ class ReplayMemory:
         self.n_steps_iter = iter(n_steps)
         self.buffer = deque()
 
-    def sample_batch(self, batch_size):  # creates an iterator that returns random batches
+    def sample_batch(self, batch_size):
         ofs = 0
         vals = list(self.buffer)
         np.random.shuffle(vals)
@@ -70,9 +62,9 @@ class ReplayMemory:
 
     def run_steps(self, samples):
         while samples > 0:
-            entry = next(self.n_steps_iter)  # 10 consecutive steps
-            self.buffer.append(entry)  # we put 200 for the current episode
+            entry = next(self.n_steps_iter)
+            self.buffer.append(entry)
             samples -= 1
-        # we accumulate no more than the capacity (10000)
+
         while len(self.buffer) > self.capacity:
             self.buffer.popleft()
