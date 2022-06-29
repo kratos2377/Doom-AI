@@ -72,8 +72,7 @@ class AI:
 
 doom_env = image_processing.PreprocessImage(
     gym.make('VizdoomCorridor-v0'), width=256, height=256, grayscale=True)
-# doom_env = wrappers.RecordVideo(doom_env, "videos")
-doom_env.render()
+doom_env = wrappers.RecordVideo(doom_env, "videos")
 number_actions = doom_env.action_space.n
 
 
@@ -142,6 +141,9 @@ for epoch in range(1, nb_epochs + 1):
     ma.add(rewards_steps)
     avg_reward = ma.average()
     print("Epoch: %s, Average Reward: %s" % (str(epoch), str(avg_reward)))
+    if avg_reward >= 1500:
+        print("Doom AI wins")
+        break
 
 
-# doom_env.close()
+doom_env.close()
