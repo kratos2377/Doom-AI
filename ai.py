@@ -7,14 +7,15 @@ from torch.autograd import Variable
 
 
 import gym
-from gym.wrappers import SkipWrapper
-from ppaquette_gym_doom.wrappers.action_space import ToDiscrete
+from vizdoom import gym_wrapper
+from gym import wrappers
 
 import experience_replay
 import image_processing
 
 
 class CNN(nn.Module):
+
     def __init__(self, number_actions):
         super(CNN, self).__init__()
         self.convolution1 = nn.Conv2d(
@@ -24,7 +25,7 @@ class CNN(nn.Module):
         self.convolution3 = nn.Conv2d(
             in_channels=32, out_channels=64, kernel_size=2)
         self.fc1 = nn.Linear(in_features=self.count_neurons(
-            (1, 80, 80)), out_features=40)
+            (1, 256, 256)), out_features=40)
         self.fc2 = nn.Linear(in_features=40, out_features=number_actions)
 
     def count_neurons(self, image_dim):
@@ -50,9 +51,9 @@ class SoftmaxBody(nn.Module):
         super(SoftmaxBody, self).__init__()
         self.T = T
 
-    def forward(self, outputs):
+    def forward(self, outputs, number_actions=1):
         probs = F.softmax(outputs * self.T)
-        actions = probs.multinomial()
+        actions = probs.multinomial(num_samples=number_actions)
         return actions
 
 
@@ -67,3 +68,80 @@ class AI:
         output = self.brain(input)
         actions = self.body(output)
         return actions.data.numpy()
+
+
+doom_env = image_processing.PreprocessImage(
+    gym.make('VizdoomCorridor-v0'), width=256, height=256, grayscale=True)
+# doom_env = wrappers.RecordVideo(doom_env, "videos")
+doom_env.render()
+number_actions = doom_env.action_space.n
+
+
+cnn = CNN(number_actions)
+softmax_body = SoftmaxBody(T=1.0)
+ai = AI(brain=cnn, body=softmax_body)
+
+
+n_steps = experience_replay.NStepProgress(env=doom_env, ai=ai, n_step=10)
+memory = experience_replay.ReplayMemory(n_steps=n_steps, capacity=10000)
+
+
+def eligibility_trace(batch):
+    gamma = 0.99
+    inputs = []
+    targets = []
+    for series in batch:
+        input = Variable(torch.from_numpy(
+            np.array([series[0].state, series[-1].state], dtype=np.float32)))
+        output = cnn(input)
+        cumul_reward = 0.0 if series[-1].done else output[1].data.max()
+        for step in reversed(series[:-1]):
+            cumul_reward = step.reward + gamma * cumul_reward
+        state = series[0].state
+        target = output[0].data
+        target[series[0].action] = cumul_reward
+        inputs.append(state)
+        targets.append(target)
+    return torch.from_numpy(np.array(inputs, dtype=np.float32)), torch.stack(targets)
+
+
+class MA:
+    def __init__(self, size):
+        self.list_of_rewards = []
+        self.size = size
+
+    def add(self, rewards):
+        if isinstance(rewards, list):
+            self.list_of_rewards += rewards
+        else:
+            self.list_of_rewards.append(rewards)
+        while len(self.list_of_rewards) > self.size:
+            del self.list_of_rewards[0]
+
+    def average(self):
+        return np.mean(self.list_of_rewards)
+
+
+ma = MA(100)
+
+
+loss = nn.MSELoss()
+optimizer = optim.Adam(cnn.parameters(), lr=0.001)
+nb_epochs = 20
+for epoch in range(1, nb_epochs + 1):
+    memory.run_steps(samples=200)
+    for batch in memory.sample_batch(128):
+        inputs, targets = eligibility_trace(batch)
+        inputs, targets = Variable(inputs), Variable(targets)
+        predictions = cnn(inputs)
+        loss_error = loss(predictions, targets)
+        optimizer.zero_grad()
+        loss_error.backward()
+        optimizer.step()
+    rewards_steps = n_steps.rewards_steps()
+    ma.add(rewards_steps)
+    avg_reward = ma.average()
+    print("Epoch: %s, Average Reward: %s" % (str(epoch), str(avg_reward)))
+
+
+# doom_env.close()

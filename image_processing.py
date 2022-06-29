@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.misc import imresize
+import cv2
 from gym.core import ObservationWrapper
 from gym.spaces.box import Box
 
@@ -16,7 +16,7 @@ class PreprocessImage(ObservationWrapper):
 
     def _observation(self, img):
         img = self.crop(img)
-        img = imresize(img, self.img_size)
+        img = cv2.resize(img, self.img_size)
         if self.grayscale:
             img = img.mean(-1, keepdims=True)
         img = np.transpose(img, (2, 0, 1))
