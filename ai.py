@@ -10,8 +10,7 @@ import gym
 from vizdoom import gym_wrapper
 from gym import wrappers
 
-import experience_replay
-import image_processing
+ 
 
 
 class CNN(nn.Module):
